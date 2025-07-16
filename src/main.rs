@@ -1,79 +1,63 @@
-#[derive(Debug)]
+use std::env;
+use std::path::PathBuf;
+
+#[derive(Debug, Clone)]
 enum Tokens {
-    Plus,
-    Minus,
-    Divide,
-    Multiply,
-    Equals,
-    Let,
-    Num(i64),
-    Ident(String),
+    Ls,
+    Cat(String),
 }
 
-fn tokenize(src: String) -> Vec<Tokens> {
+fn tokenize(src: &str) -> Vec<Tokens> {
     let mut toks: Vec<Tokens> = Vec::new();
-    let code: Vec<char> = src.chars().collect();
+    let code: Vec<&str> = src.split_whitespace().collect();
+
     let mut i = 0;
 
     while i < code.len() {
         let c = code[i];
-
+        
         match c {
-            ' ' | '\n' | '\t' => i += 1,
-            '+' => {
-                toks.push(Tokens::Plus);
+            "ls" => {
+                toks.push(Tokens::Ls);
                 i += 1;
             }
-            '-' => {
-                toks.push(Tokens::Minus);
-                i += 1;
-            }
-            '*' => {
-                toks.push(Tokens::Multiply);
-                i += 1;
-            }
-            '/' => {
-                toks.push(Tokens::Divide);
-                i += 1;
-            }
-            '=' => {
-                toks.push(Tokens::Equals);
-                i += 1;
-            }
-            c if c.is_alphabetic() => {
-                let mut builder_str = String::new();
-                while i < code.len() && code[i].is_alphabetic() {
-                    builder_str.push(code[i]);
-                    i += 1;
-                }
-                match builder_str.as_str() {
-                    "let" => toks.push(Tokens::Let),
-                    _ => toks.push(Tokens::Ident(builder_str)),
-                }
-            }
-            c if c.is_numeric() => {
-                let mut builder_str = String::new();
-                while i < code.len() && code[i].is_numeric() {
-                    builder_str.push(code[i]);
-                    i += 1;
-                }
-                match builder_str.parse::<i64>() {
-                    Ok(num) => toks.push(Tokens::Num(num)),
-                    Err(e) => println!("Failed to parse: {}", e),
-                }
+            "cat" => {
+                toks.push(Tokens::Cat(String::from(code[i+1])));
+                i += 2;
             }
             _ => {
-                println!("Unknwon token: {}", c);
+                println!("ERROR: Unrecogized option: {}, in {}", c, src);
+                assert!(false);
+            }
+        }
+    }
+    toks
+}
+
+fn parse(toks: Vec<Tokens>) {
+    let mut i = 0;
+
+    while i < toks.len() {
+        let t = toks[i].clone();
+
+        match t {
+            Tokens::Ls => {
+                match env::current_dir() {
+                    Ok(path) => println!("{}", path.display()),
+                    Err(e) => println!("ERROR: Could not get the current_dir: {}", e),
+                }
+                i += 1;
+            }
+            _ => {
+                todo!();
                 i += 1;
             }
         }
     }
-
-    toks
 }
 
 fn main() {
-    let toks = tokenize(String::from("let num = 1234 - 1234"));
+    let toks = tokenize("ls");
     println!("{:?}", toks);
+    parse(toks);
 }
-
