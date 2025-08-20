@@ -1,7 +1,7 @@
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
-use actix_web::{get, App, HttpResponse, HttpServer, Responder};
+use actix_web::{get, App, HttpResponse, HttpRequest, HttpServer, Responder};
 
 fn make_json(path: &str) {
     fs::File::create(path).unwrap();
@@ -24,9 +24,21 @@ fn append_json(path: &str, context: &str, content: &str) {
     }
 }
 
-#[get("/")]
 async fn hello() -> impl Responder {
     HttpResponse::Ok().body("Hello")
+}
+
+async fn collect(req: &HttpRequest) -> impl Responder {
+    if let Some(val) = req.peer_addr() {
+        println!("Address {:?}", val.ip());
+    };
+    HttpResponse::Ok()
+}
+
+#[get("/")]
+async fn home(req: HttpRequest) -> impl Responder {
+    collect(&req).await;
+    hello().await
 }
 
 #[actix_web::main]
@@ -38,9 +50,9 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(|| {
         App::new()
-            .service(hello)
+            .service(home)
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind(("0.0.0.0", 8080))?
     .run()
     .await
 }
