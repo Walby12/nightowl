@@ -1,58 +1,64 @@
-use std::fs;
-use std::fs::OpenOptions;
-use std::io::prelude::*;
-use actix_web::{get, App, HttpResponse, HttpRequest, HttpServer, Responder};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder, post, get};
+use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
+use std::collections::HashMap;
+use actix_files::NamedFile;
+use std::path::PathBuf;
 
-fn make_json(path: &str) {
-    fs::File::create(path).unwrap();
+#[derive(Serialize, Clone)]
+struct Message {
+    id: usize,
+    user: String,
+    text: String,
 }
 
-fn append_json(path: &str, context: &str, content: &str) {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(path)
-        .unwrap();
-    
-    let json_to_write = format!("{context} {{\n\t{content}\n}}\n");
-
-    let ms = file.write_all(json_to_write.as_bytes());
-    match ms {
-        Ok(_) => println!("Ok: succesfuly writed to file"),
-        Err(e) => eprintln!("Error: Could not write to file, {}", e),
-    }
+struct AppState {
+    messages: Mutex<Vec<Message>>,
 }
 
-async fn hello() -> impl Responder {
-    HttpResponse::Ok().body("Hello")
+#[derive(Deserialize)]
+struct JsonMessage {
+    user: String,
+    msg: String,
 }
 
-async fn collect(req: &HttpRequest) -> impl Responder {
-    if let Some(val) = req.peer_addr() {
-        println!("Address {:?}", val.ip());
-    };
-    HttpResponse::Ok()
+#[post("/send")]
+async fn send_message(data: web::Data<AppState>, json: web::Json<JsonMessage>) -> impl Responder {
+    let mut messages = data.messages.lock().unwrap();
+    let id = messages.len();
+    messages.push(Message { id, user: json.user.clone(), text: json.msg.clone() });
+    HttpResponse::Ok().finish()
+}
+
+#[get("/recv")]
+async fn recv_messages(data: web::Data<AppState>, query: web::Query<HashMap<String, String>>) -> impl Responder {
+    let since = query.get("since").and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+    let messages = data.messages.lock().unwrap();
+    let new_messages: Vec<Message> = messages.iter().filter(|m| m.id >= since).cloned().collect();
+    HttpResponse::Ok().json(new_messages)
 }
 
 #[get("/")]
-async fn home(req: HttpRequest) -> impl Responder {
-    collect(&req).await;
-    hello().await
+async fn home() -> actix_web::Result<NamedFile> {
+    let path: PathBuf = "src/main.html".parse().unwrap();
+    Ok(NamedFile::open(path)?)
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let file_name = "messages.json";
+    let state = web::Data::new(AppState {
+        messages: Mutex::new(Vec::new()),
+    });
 
-    make_json(file_name);
-    append_json(file_name, "walby", "1: hello\n\t2: bye\n");
-
-    HttpServer::new(|| {
+    HttpServer::new(move || {
         App::new()
+            .app_data(state.clone())
+            .service(send_message)
+            .service(recv_messages)
             .service(home)
     })
     .bind(("0.0.0.0", 8080))?
     .run()
     .await
 }
+

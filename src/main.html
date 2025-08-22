@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Nightowl Chat</title>
+</head>
+<body>
+  <h1>Login</h1>
+  <div id="loginDiv">
+    <input id="username" type="text" placeholder="Enter username">
+    <button onclick="setUsername()">Set Username</button>
+  </div>
+
+  <div id="userDiv" style="display:none;">
+    <p>Logged in as <span id="currentUser"></span></p>
+    <button onclick="changeUsername()">Change Username</button>
+  </div>
+
+  <h1>Send a message</h1>
+  <input id="msgInput" type="text" placeholder="Enter message">
+  <button onclick="sendMessage()">Send</button>
+
+  <h2>Messages</h2>
+  <ul id="messages"></ul>
+
+  <script>
+    let lastId = 0;
+    let username = localStorage.getItem("username") || "";
+
+    function updateUI() {
+      if (username) {
+        document.getElementById("loginDiv").style.display = "none";
+        document.getElementById("userDiv").style.display = "block";
+        document.getElementById("currentUser").textContent = username;
+      } else {
+        document.getElementById("loginDiv").style.display = "block";
+        document.getElementById("userDiv").style.display = "none";
+      }
+    }
+
+    function setUsername() {
+      const input = document.getElementById("username").value.trim();
+      if (!input) {
+        alert("Please enter a username!");
+        return;
+      }
+      username = input;
+      localStorage.setItem("username", username);
+      updateUI();
+    }
+
+    function changeUsername() {
+      // Clear stored username and show login box again
+      localStorage.removeItem("username");
+      username = "";
+      updateUI();
+    }
+
+    async function sendMessage() {
+      if (!username) {
+        alert("Please set a username first!");
+        return;
+      }
+      let msg = document.getElementById("msgInput").value.trim();
+      if (!msg) return;
+
+      await fetch("/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user: username, msg: msg })
+      });
+
+      document.getElementById("msgInput").value = "";
+    }
+
+    async function loadMessages() {
+      let res = await fetch("/recv?since=" + lastId);
+      let msgs = await res.json();
+
+      let list = document.getElementById("messages");
+      msgs.forEach(m => {
+        let li = document.createElement("li");
+        li.textContent = `${m.user}: ${m.text}`;
+        list.appendChild(li);
+        lastId = m.id + 1;
+      });
+    }
+
+    updateUI();
+    setInterval(loadMessages, 500);
+  </script>
+</body>
+</html>
